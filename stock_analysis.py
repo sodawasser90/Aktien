@@ -6,9 +6,14 @@ import requests
 import numpy as np
 
 def get_stock_data(ticker, start='2020-01-01'):
-    stock = yf.Ticker(ticker)
-    data = stock.history(start=start)
-    return data, stock.info.get('longName', ticker), stock.info
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(start=start)
+        if data.empty:
+            return None, None, None
+        return data, stock.info.get('longName', ticker), stock.info
+    except:
+        return None, None, None
 
 def get_external_ratings(ticker):
     rating_sources = {
@@ -38,12 +43,9 @@ def find_valid_ticker(query):
         for suffix in suffixes:
             full_ticker = ticker + suffix
             checked_tickers.append(full_ticker)
-            try:
-                data = yf.Ticker(full_ticker).history(period="1d")
-                if not data.empty:
-                    return full_ticker, []
-            except:
-                continue
+            data, name, info = get_stock_data(full_ticker)
+            if data is not None:
+                return full_ticker, []
     
     return None, checked_tickers
 
@@ -70,8 +72,11 @@ def calculate_score(sma50, sma200, rsi, macd, signal_line):
 
 def analyze_stock(ticker):
     data, name, info = get_stock_data(ticker)
-    data = calculate_indicators(data)
+    if data is None:
+        st.write("❌ Aktie nicht gefunden oder keine Daten verfügbar.")
+        return
     
+    data = calculate_indicators(data)
     latest_price = data['Close'].iloc[-1]
     sma50 = data['SMA50'].iloc[-1]
     sma200 = data['SMA200'].iloc[-1]
@@ -111,9 +116,9 @@ def main():
         if ticker:
             analyze_stock(ticker)
         else:
-            st.write("Aktie nicht gefunden. Bitte überprüfe deine Eingabe.")
+            st.write("❌ Aktie nicht gefunden. Bitte überprüfe deine Eingabe.")
             if checked_tickers:
-                st.write("Mögliche getestete Alternativen:")
+                st.write("🔍 Mögliche getestete Alternativen:")
                 for alt in checked_tickers:
                     st.write(f"- {alt}")
 
