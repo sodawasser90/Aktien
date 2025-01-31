@@ -30,20 +30,22 @@ def get_ticker_by_name_or_isin(query):
 
 def find_valid_ticker(query):
     possible_tickers = get_ticker_by_name_or_isin(query)
-    if not possible_tickers:
-        return None, []
-    
+    suffixes = ["", ".TO", ".DE", ".PA", ".L", ".F", ".SW", ".MI"]  # Häufige Börsen-Suffixe
     valid_ticker = None
-    for ticker in possible_tickers:
-        try:
-            data = yf.Ticker(ticker).history(period="1d")
-            if not data.empty:
-                valid_ticker = ticker
-                break
-        except:
-            continue
+    checked_tickers = []
     
-    return valid_ticker, possible_tickers
+    for ticker in possible_tickers:
+        for suffix in suffixes:
+            full_ticker = ticker + suffix
+            checked_tickers.append(full_ticker)
+            try:
+                data = yf.Ticker(full_ticker).history(period="1d")
+                if not data.empty:
+                    return full_ticker, []
+            except:
+                continue
+    
+    return None, checked_tickers
 
 def plot_stock_data_interactive(data, ticker):
     fig = px.line(data, x=data.index, y='Close', title=f'Aktienkursverlauf von {ticker}', labels={'Close': 'Preis', 'index': 'Datum'})
@@ -104,15 +106,15 @@ def main():
     
     if choice == "Aktie suchen":
         search_query = st.text_input("Gib den Namen, das Kürzel oder die ISIN der Aktie ein:")
-        ticker, alternatives = find_valid_ticker(search_query)
+        ticker, checked_tickers = find_valid_ticker(search_query)
         
         if ticker:
             analyze_stock(ticker)
         else:
             st.write("Aktie nicht gefunden. Bitte überprüfe deine Eingabe.")
-            if alternatives:
-                st.write("Mögliche Alternativen:")
-                for alt in alternatives:
+            if checked_tickers:
+                st.write("Mögliche getestete Alternativen:")
+                for alt in checked_tickers:
                     st.write(f"- {alt}")
 
 if __name__ == "__main__":
