@@ -67,6 +67,22 @@ def analyze_stock(ticker):
     
     plot_stock_data_interactive(data, ticker)
 
+def get_top_stocks():
+    recommendations = {}
+    watchlist = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
+    
+    for ticker in watchlist:
+        data, name = get_stock_data(ticker)
+        data = calculate_moving_averages(data)
+        
+        sma50 = data['SMA50'].iloc[-1]
+        sma200 = data['SMA200'].iloc[-1]
+        
+        if sma50 > sma200:
+            recommendations[ticker] = (name, "Kaufsignal")
+    
+    return recommendations
+
 def main():
     st.title("Aktienanalyse Tool")
     menu = ["Aktie suchen", "Tägliche Empfehlungen"]
@@ -80,6 +96,15 @@ def main():
             analyze_stock(ticker)
         else:
             st.write("Aktie nicht gefunden. Bitte überprüfe deine Eingabe.")
+    elif choice == "Tägliche Empfehlungen":
+        recommendations = get_top_stocks()
+        if not recommendations:
+            st.write("### Keine Millionen drin heute")
+        else:
+            for ticker, (name, signal) in recommendations.items():
+                st.write(f"### {name} ({ticker})")
+                st.write(f"**Empfehlung:** {signal}")
+                analyze_stock(ticker)
 
 if __name__ == "__main__":
     main()
