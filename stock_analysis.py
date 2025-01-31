@@ -20,11 +20,30 @@ def get_external_ratings(ticker):
 
 def get_ticker_by_name_or_isin(query):
     try:
-        search_url = f"https://query1.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=1&newsCount=0"
+        search_url = f"https://query1.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=5&newsCount=0"
         response = requests.get(search_url).json()
-        return response['quotes'][0]['symbol'] if 'quotes' in response and response['quotes'] else None
+        if 'quotes' in response and response['quotes']:
+            return [q['symbol'] for q in response['quotes']]
     except:
-        return None
+        return []
+    return []
+
+def find_valid_ticker(query):
+    possible_tickers = get_ticker_by_name_or_isin(query)
+    if not possible_tickers:
+        return None, []
+    
+    valid_ticker = None
+    for ticker in possible_tickers:
+        try:
+            data = yf.Ticker(ticker).history(period="1d")
+            if not data.empty:
+                valid_ticker = ticker
+                break
+        except:
+            continue
+    
+    return valid_ticker, possible_tickers
 
 def plot_stock_data_interactive(data, ticker):
     fig = px.line(data, x=data.index, y='Close', title=f'Aktienkursverlauf von {ticker}', labels={'Close': 'Preis', 'index': 'Datum'})
@@ -85,14 +104,16 @@ def main():
     
     if choice == "Aktie suchen":
         search_query = st.text_input("Gib den Namen, das Kürzel oder die ISIN der Aktie ein:")
-        ticker = get_ticker_by_name_or_isin(search_query) if search_query else None
+        ticker, alternatives = find_valid_ticker(search_query)
         
         if ticker:
             analyze_stock(ticker)
         else:
             st.write("Aktie nicht gefunden. Bitte überprüfe deine Eingabe.")
+            if alternatives:
+                st.write("Mögliche Alternativen:")
+                for alt in alternatives:
+                    st.write(f"- {alt}")
 
 if __name__ == "__main__":
     main()
-
-
