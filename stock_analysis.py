@@ -18,9 +18,9 @@ def get_external_ratings(ticker):
     }
     return rating_sources
 
-def get_ticker_by_name(name):
+def get_ticker_by_name_or_isin(query):
     try:
-        search_url = f"https://query1.finance.yahoo.com/v1/finance/search?q={name}&quotesCount=1&newsCount=0"
+        search_url = f"https://query1.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=1&newsCount=0"
         response = requests.get(search_url).json()
         return response['quotes'][0]['symbol'] if 'quotes' in response and response['quotes'] else None
     except:
@@ -78,49 +78,21 @@ def analyze_stock(ticker):
     st.write(f"**Begründung:** {reason}")
     plot_stock_data_interactive(data, ticker)
 
-def get_top_stocks():
-    watchlist = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'SAP', 'DTE.DE', 'AIR.PA', 'NKE', 'NVDA']
-    stock_scores = []
-    
-    for ticker in watchlist:
-        data, name, info = get_stock_data(ticker)
-        data = calculate_indicators(data)
-        
-        sma50 = data['SMA50'].iloc[-1]
-        sma200 = data['SMA200'].iloc[-1]
-        rsi = data['RSI'].iloc[-1]
-        macd = data['MACD'].iloc[-1]
-        signal_line = data['Signal_Line'].iloc[-1]
-        
-        score = calculate_score(sma50, sma200, rsi, macd, signal_line)
-        stock_scores.append((ticker, name, score))
-    
-    stock_scores.sort(key=lambda x: x[2], reverse=True)
-    return stock_scores[:10]
-
 def main():
     st.title("Aktienanalyse Tool")
     menu = ["Aktie suchen", "Tägliche Empfehlungen"]
     choice = st.sidebar.selectbox("Wähle eine Option", menu)
     
     if choice == "Aktie suchen":
-        search_query = st.text_input("Gib den Namen oder das Kürzel der Aktie ein:")
-        ticker = get_ticker_by_name(search_query) if search_query and not search_query.isupper() else search_query.upper()
+        search_query = st.text_input("Gib den Namen, das Kürzel oder die ISIN der Aktie ein:")
+        ticker = get_ticker_by_name_or_isin(search_query) if search_query else None
         
         if ticker:
             analyze_stock(ticker)
         else:
             st.write("Aktie nicht gefunden. Bitte überprüfe deine Eingabe.")
-    elif choice == "Tägliche Empfehlungen":
-        recommendations = get_top_stocks()
-        if not recommendations:
-            st.write("### Keine Millionen drin heute")
-        else:
-            for ticker, name, score in recommendations:
-                st.write(f"### {name} ({ticker})")
-                st.write(f"**Score:** {score}")
-                analyze_stock(ticker)
 
 if __name__ == "__main__":
     main()
+
 
