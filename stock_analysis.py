@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 import plotly.express as px
 import requests
+import numpy as np
 
 def get_stock_data(ticker, start='2020-01-01'):
     stock = yf.Ticker(ticker)
@@ -33,7 +34,18 @@ def calculate_indicators(data):
     data['SMA50'] = data['Close'].rolling(window=50).mean()
     data['SMA200'] = data['Close'].rolling(window=200).mean()
     data['RSI'] = 100 - (100 / (1 + (data['Close'].diff().clip(lower=0).rolling(14).mean() / data['Close'].diff().clip(upper=0).abs().rolling(14).mean())))
+    data['MACD'] = data['Close'].ewm(span=12, adjust=False).mean() - data['Close'].ewm(span=26, adjust=False).mean()
+    data['Signal_Line'] = data['MACD'].ewm(span=9, adjust=False).mean()
+    data['Bollinger_Upper'] = data['Close'].rolling(window=20).mean() + (data['Close'].rolling(window=20).std() * 2)
+    data['Bollinger_Lower'] = data['Close'].rolling(window=20).mean() - (data['Close'].rolling(window=20).std() * 2)
     return data
+
+def calculate_score(sma50, sma200, rsi, macd, signal_line):
+    score = 0
+    score += 0.4 if sma50 > sma200 else -0.4
+    score += 0.2 if rsi < 70 else -0.2
+    score += 0.2 if macd > signal_line else -0.2
+    return round(score, 2)
 
 def analyze_stock(ticker):
     data, name, info = get_stock_data(ticker)
@@ -43,38 +55,32 @@ def analyze_stock(ticker):
     sma50 = data['SMA50'].iloc[-1]
     sma200 = data['SMA200'].iloc[-1]
     rsi = data['RSI'].iloc[-1]
+    macd = data['MACD'].iloc[-1]
+    signal_line = data['Signal_Line'].iloc[-1]
     pe_ratio = info.get('trailingPE', 'N/A')
     dividend_yield = info.get('dividendYield', 'N/A')
     
+    score = calculate_score(sma50, sma200, rsi, macd, signal_line)
     signal = "Neutral"
     reason = "Keine klare Kauf- oder Verkaufsempfehlung."
     
-    if sma50 > sma200 and rsi < 70:
+    if score > 0.5:
         signal = "Kaufsignal"
-        reason = "50-Tage-Durchschnitt über 200-Tage-Durchschnitt, RSI unter 70. Aufwärtstrend ohne Überkauf."
-    elif sma50 < sma200 and rsi > 30:
+        reason = "Der berechnete Score zeigt eine insgesamt positive Marktstruktur."
+    elif score < -0.5:
         signal = "Vorsicht geboten"
-        reason = "50-Tage-Durchschnitt unter 200-Tage-Durchschnitt. Mögliches Abwärtspotenzial."
+        reason = "Der berechnete Score zeigt eine negative Marktstruktur."
     
     st.write(f"### {name} ({ticker})")
     st.write(f"**Aktueller Preis:** {latest_price:.2f} USD")
-    st.write(f"**50-Tage-SMA:** {sma50:.2f}")
-    st.write(f"**200-Tage-SMA:** {sma200:.2f}")
-    st.write(f"**RSI:** {rsi:.2f}")
-    st.write(f"**KGV:** {pe_ratio}")
-    st.write(f"**Dividendenrendite:** {dividend_yield}")
+    st.write(f"**Score:** {score}")
     st.write(f"**Empfehlung:** {signal}")
     st.write(f"**Begründung:** {reason}")
-    
-    st.write("### Externe Bewertungen")
-    for source, url in get_external_ratings(ticker).items():
-        st.write(f"[{source}]({url})")
-    
     plot_stock_data_interactive(data, ticker)
 
 def get_top_stocks():
-    recommendations = {}
-    watchlist = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
+    watchlist = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'SAP', 'DTE.DE', 'AIR.PA', 'NKE', 'NVDA']
+    stock_scores = []
     
     for ticker in watchlist:
         data, name, info = get_stock_data(ticker)
@@ -83,11 +89,14 @@ def get_top_stocks():
         sma50 = data['SMA50'].iloc[-1]
         sma200 = data['SMA200'].iloc[-1]
         rsi = data['RSI'].iloc[-1]
+        macd = data['MACD'].iloc[-1]
+        signal_line = data['Signal_Line'].iloc[-1]
         
-        if sma50 > sma200 and rsi < 70:
-            recommendations[ticker] = (name, "Kaufsignal")
+        score = calculate_score(sma50, sma200, rsi, macd, signal_line)
+        stock_scores.append((ticker, name, score))
     
-    return recommendations
+    stock_scores.sort(key=lambda x: x[2], reverse=True)
+    return stock_scores[:10]
 
 def main():
     st.title("Aktienanalyse Tool")
@@ -107,10 +116,11 @@ def main():
         if not recommendations:
             st.write("### Keine Millionen drin heute")
         else:
-            for ticker, (name, signal) in recommendations.items():
+            for ticker, name, score in recommendations:
                 st.write(f"### {name} ({ticker})")
-                st.write(f"**Empfehlung:** {signal}")
+                st.write(f"**Score:** {score}")
                 analyze_stock(ticker)
 
 if __name__ == "__main__":
     main()
+
