@@ -7,7 +7,7 @@ import requests
 def get_stock_data(ticker, start='2020-01-01'):
     stock = yf.Ticker(ticker)
     data = stock.history(start=start)
-    return data, stock.info.get('longName', ticker)
+    return data, stock.info.get('longName', ticker), stock.info
 
 def get_external_ratings(ticker):
     rating_sources = {
@@ -29,35 +29,40 @@ def plot_stock_data_interactive(data, ticker):
     fig = px.line(data, x=data.index, y='Close', title=f'Aktienkursverlauf von {ticker}', labels={'Close': 'Preis', 'index': 'Datum'})
     st.plotly_chart(fig)
 
-def calculate_moving_averages(data, short_window=50, long_window=200):
-    data['SMA50'] = data['Close'].rolling(window=short_window).mean()
-    data['SMA200'] = data['Close'].rolling(window=long_window).mean()
+def calculate_indicators(data):
+    data['SMA50'] = data['Close'].rolling(window=50).mean()
+    data['SMA200'] = data['Close'].rolling(window=200).mean()
+    data['RSI'] = 100 - (100 / (1 + (data['Close'].diff().clip(lower=0).rolling(14).mean() / data['Close'].diff().clip(upper=0).abs().rolling(14).mean())))
     return data
 
 def analyze_stock(ticker):
-    data, name = get_stock_data(ticker)
-    data = calculate_moving_averages(data)
+    data, name, info = get_stock_data(ticker)
+    data = calculate_indicators(data)
     
     latest_price = data['Close'].iloc[-1]
     sma50 = data['SMA50'].iloc[-1]
     sma200 = data['SMA200'].iloc[-1]
+    rsi = data['RSI'].iloc[-1]
+    pe_ratio = info.get('trailingPE', 'N/A')
+    dividend_yield = info.get('dividendYield', 'N/A')
     
-    signal = ""
-    reason = ""
-    if sma50 > sma200:
+    signal = "Neutral"
+    reason = "Keine klare Kauf- oder Verkaufsempfehlung."
+    
+    if sma50 > sma200 and rsi < 70:
         signal = "Kaufsignal"
-        reason = "Der 50-Tage-Durchschnitt liegt über dem 200-Tage-Durchschnitt, was auf einen Aufwärtstrend hindeutet."
-    elif sma50 < sma200:
+        reason = "50-Tage-Durchschnitt über 200-Tage-Durchschnitt, RSI unter 70. Aufwärtstrend ohne Überkauf."
+    elif sma50 < sma200 and rsi > 30:
         signal = "Vorsicht geboten"
-        reason = "Der 50-Tage-Durchschnitt liegt unter dem 200-Tage-Durchschnitt, was auf eine mögliche Abwärtsbewegung hindeutet."
-    else:
-        signal = "Neutral"
-        reason = "Die Durchschnitte liegen nahe beieinander, was keine klare Richtung signalisiert."
+        reason = "50-Tage-Durchschnitt unter 200-Tage-Durchschnitt. Mögliches Abwärtspotenzial."
     
     st.write(f"### {name} ({ticker})")
     st.write(f"**Aktueller Preis:** {latest_price:.2f} USD")
     st.write(f"**50-Tage-SMA:** {sma50:.2f}")
     st.write(f"**200-Tage-SMA:** {sma200:.2f}")
+    st.write(f"**RSI:** {rsi:.2f}")
+    st.write(f"**KGV:** {pe_ratio}")
+    st.write(f"**Dividendenrendite:** {dividend_yield}")
     st.write(f"**Empfehlung:** {signal}")
     st.write(f"**Begründung:** {reason}")
     
@@ -72,13 +77,14 @@ def get_top_stocks():
     watchlist = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
     
     for ticker in watchlist:
-        data, name = get_stock_data(ticker)
-        data = calculate_moving_averages(data)
+        data, name, info = get_stock_data(ticker)
+        data = calculate_indicators(data)
         
         sma50 = data['SMA50'].iloc[-1]
         sma200 = data['SMA200'].iloc[-1]
+        rsi = data['RSI'].iloc[-1]
         
-        if sma50 > sma200:
+        if sma50 > sma200 and rsi < 70:
             recommendations[ticker] = (name, "Kaufsignal")
     
     return recommendations
